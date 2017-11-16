@@ -16,6 +16,7 @@ Requirements
 ============
 
 - OpenLDAP server with TLS and SASL/EXTERNAL
+- OpenDKIM LDAP schema
 - Rspamd >=1.6.5
 - Python modules memcache, redis and pyldap (needed for Python 3.x)
 - uWSGI with Python support (tested with Python version 3.4)
