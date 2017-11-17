@@ -1,5 +1,5 @@
 # rspamd-arc
-Proof of concept uWSGI service that syncs OpenLDAP DKIM-Keys with Rspamd for ARC signing
+Proof of concept uWSGI service that syncs OpenLDAP DKIM-Keys with Rspamd for DKIM/ARC signing
 
 Introduction
 ============
@@ -11,6 +11,11 @@ My Rspamd configuration has DKIM signing disabled, but I like to use ARC signing
 This uWSGI service runs behind Nginx and serves a ARC selector map derrived from OpenLDAP. It also automatically synchronizes the RSA keys with Redis.
 
 My setup is a little bit special, as I use SASL/EXTERNAL with x509 certificates to communicate with the OpenLDAP service. This makes the current code a proof-of-concept, because I did not implement all LDAP features. Just the ones I need. But feel free to help and tweak the code ;-)
+
+Note
+----
+
+This service can be used for DKIM and ARC support in Rspamd! This example only demonstrates the use for ARC
 
 Requirements
 ============
@@ -50,6 +55,8 @@ UWSGI_EXTRA_OPTIONS="--plugin python34 --python-path /usr/local/share/rspamd --m
 
 Nginx
 -----
+
+Example for ARC usage. Add a location string for DKIM, if you want to use it for this task.
 
 ```
 server {
@@ -92,7 +99,7 @@ redis settings:
 REDIS_HOST = "127.0.0.1"
 REDIS_PORT = 6379
 REDIS_DB = 0
-REDIS_HMNAME = "ARC_KEYS"
+REDIS_HMNAME = "DKIM_ARC_KEYS"
 
 DEBUG = True
 ```
@@ -101,6 +108,30 @@ Finally I added a "curl" call to the Rspamd init script, to clear the memcache k
 
 ```
 curl -X DELETE --silent http://127.0.0.1/arc
+```
+
+Rspamd-settings
+===============
+
+Example file /etc/rspamd/local.d/arc.conf
+
+```
+# Settings copied from dkim_sign
+allow_envfrom_empty = true;
+allow_hdrfrom_mismatch = true;
+allow_hdrfrom_multiple = false;
+allow_username_mismatch = true;
+auth_only = true;
+selector_map = "http://127.0.0.1/arc";
+sign_local = true;
+symbol_signed = "ARC_SIGNED";
+try_fallback = false;
+use_domain = "header";
+use_esld = true;
+use_redis = true;
+key_prefix = "DKIM_ARC_KEYS";
+
+enabled = true;
 ```
 
 TODO
