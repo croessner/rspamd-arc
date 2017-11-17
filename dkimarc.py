@@ -4,22 +4,18 @@ arc
 Copyright (c) 2017 R.N.S.
 """
 
+import hashlib
 import os
 import sys
-import traceback
-import gzip
-import json
 import time
+from html import escape
+from wsgiref.simple_server import make_server
+
 import ldap
 import ldap.sasl
 import ldapurl
 import memcache
 import redis
-import hashlib
-
-from wsgiref.simple_server import make_server
-from html import escape
-from pprint import pprint
 
 # -- Configuration -------------------------------------------------------------
 
@@ -115,7 +111,7 @@ def application(environ, start_response):
         con.sasl_interactive_bind_s('', auth_tokens)
     except Exception as ldap_error:
         print("ldap: cannot connect to LDAP server: {}".format(ldap_error),
-            file=sys.stderr)
+              file=sys.stderr)
 
     if con:
         # Get DKIMDomains and DKIMSelector attributes
@@ -132,7 +128,6 @@ def application(environ, start_response):
             con.abandon(rid)
             status = stat_not_modified
         else:
-            need_refresh = False
             keys_ldap = list()
             for entry in raw_result_dmn[1]:
                 attrs = entry[1]
@@ -151,17 +146,17 @@ def application(environ, start_response):
                     if redis_result[0]:
                         if DEBUG:
                             print(
-                                "redis: RSA key found for {} length={}". format(
-                                redis_key, len(redis_result[0])))
+                                "redis: RSA key found for {} length={}".format(
+                                    redis_key, len(redis_result[0])))
                     else:
-                        rd.hmset(REDIS_HMNAME, { redis_key: rsa_key })
+                        rd.hmset(REDIS_HMNAME, {redis_key: rsa_key})
                         if DEBUG:
-                            print("redis: RSA key added for {}". format(
+                            print("redis: RSA key added for {}".format(
                                 redis_key))
 
                 # Add record to map
                 result_map_l.append(domain + b'\t' + selector + b'\r\n')
-        
+
             if rd:
                 # Remove orphaned redis keys
                 keys_redis = rd.hkeys(REDIS_HMNAME)
@@ -177,7 +172,7 @@ def application(environ, start_response):
             result_map_ldap_hash = hashlib.sha256(result_map).hexdigest()
             if DEBUG:
                 print("result_map_ldap_hash={}".format(result_map_ldap_hash))
-            
+
             client = environ['REMOTE_ADDR']
             mc_key = "arc_{}".format(client)
             if mc:
@@ -201,11 +196,11 @@ def application(environ, start_response):
                     mc.set(mc_key, result_map_ldap_hash, time=MC_TTL)
                     map_refreshed = True
             else:
-                stat = stat_err
+                status = stat_err
 
         # Closing LDAP connection
         con.unbind_s()
-            
+
     else:
         status = stat_err
 
@@ -232,6 +227,7 @@ def application(environ, start_response):
     start_response(status, response_headers)
 
     return [response_body]
+
 
 if __name__ == "__main__":
     httpd = make_server('localhost', 8080, application)
