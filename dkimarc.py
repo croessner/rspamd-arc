@@ -1,5 +1,5 @@
 """
-arc
+dkimarc
 
 Copyright (c) 2017 R.N.S.
 """
@@ -9,6 +9,7 @@ import os
 import sys
 import time
 from html import escape
+from urllib.parse import urlparse
 from wsgiref.simple_server import make_server
 
 import ldap
@@ -31,13 +32,13 @@ MC_TTL = 3600
 REDIS_HOST = "127.0.0.1"
 REDIS_PORT = 6379
 REDIS_DB = 0
-REDIS_HMNAME = "ARC_KEYS"
+REDIS_HMNAME = "DKIM_ARC_KEYS"
 
 DEBUG = True
 
 # ------------------------------------------------------------------------------
 
-__version__ = '2017.11.1'
+__version__ = '2017.11.2'
 __author__ = "Christian Roessner <c@roessner.co>"
 __copyright__ = "Copyright (c) 2017 R.N.S."
 
@@ -69,6 +70,22 @@ def application(environ, start_response):
     request_method = environ['REQUEST_METHOD']
     request_method = escape(request_method)
 
+    request_uri = environ['REQUEST_URI']
+    request_uri = escape(request_uri)
+    parsed_uri = urlparse(request_uri)
+
+    # We use the last ascii part of the URI path as a memcache-suffix
+    last_uri_path = parsed_uri.path.split('/')[-1]
+    if last_uri_path != "":
+        suffix = last_uri_path
+    else:
+        suffix = "default"
+
+    client = environ['REMOTE_ADDR']
+    mc_key = "dkimarc_{}_{}".format(client, suffix)
+    if DEBUG:
+        print("mc_key={}".format(mc_key))
+
     mc = memcache.Client([MC_URL], debug=0)
     if not mc:
         print("memcache: error", file=sys.stderr)
@@ -83,9 +100,6 @@ def application(environ, start_response):
     now = time.strftime(date_fmt, time.gmtime(timestamp))
 
     if request_method == "DELETE":
-        client = environ['REMOTE_ADDR']
-        mc_key = "arc_{}".format(client)
-
         if mc:
             mc.delete(mc_key)
             if DEBUG:
@@ -173,8 +187,6 @@ def application(environ, start_response):
             if DEBUG:
                 print("result_map_ldap_hash={}".format(result_map_ldap_hash))
 
-            client = environ['REMOTE_ADDR']
-            mc_key = "arc_{}".format(client)
             if mc:
                 mc_value = mc.get(mc_key)
                 if mc_value:
@@ -184,15 +196,15 @@ def application(environ, start_response):
                         map_refreshed = True
                     if not map_refreshed:
                         if DEBUG:
-                            print("memcache: ARC selector map touched")
+                            print("memcache: DKIM/ARC selector map touched")
                         mc.touch(mc_key, time=MC_TTL)
                     else:
                         if DEBUG:
-                            print("memcache: ARC selector map changed")
+                            print("memcache: DKIM/ARC selector map changed")
                         mc.replace(mc_key, result_map_ldap_hash, time=MC_TTL)
                 else:
                     if DEBUG:
-                        print("memcache: ARC selector map created")
+                        print("memcache: DKIM/ARC selector map created")
                     mc.set(mc_key, result_map_ldap_hash, time=MC_TTL)
                     map_refreshed = True
             else:
